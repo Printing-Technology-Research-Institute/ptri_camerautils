@@ -27,7 +27,7 @@ Basler Pylon 相機的封裝實作：
 - **`PylonCameraWrapper`**：Pylon 相機的封裝類別，實作 `FrameProviderAbc` 和 `SettingPersistentCameraAbc` 介面
 - **`create_first_instance_pylon_camera`**：工廠函數，建立第一個可用的 Pylon 相機實例
 
-> ![WARNING]
+> [!WARNING]
 > 目前此套件仍正在開發中，尚未完全通過測試。
 
 #### 支援的相機設定
