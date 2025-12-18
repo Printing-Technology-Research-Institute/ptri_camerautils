@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ptri-camerautils"
+version = "0.1.0"
+description = "A collection of camera utilities for Python applications, providing unified interface for different types of cameras including Pylon cameras and TCP-based camera emulation"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Eric", email = "ericacccls@gmail.com"}
+]
+keywords = [
+    "Camera",
+    "Pylon",
+    "Camera Emulation",
+    "Basler"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy>=1.20.0",
+    "Pillow>=8.0.0",
+    "overrides>=6.0.0",
+]
+
+[project.optional-dependencies]
+pypylon = ["pypylon>=4.2.0"]
+
+[tool.setuptools]
+# Package structure: pyproject.toml is in the package root directory
+# Map the package name to the current directory where the Python modules are located
+package-dir = {"ptri_camerautils" = "."}
+packages = [
+    "ptri_camerautils",
+    "ptri_camerautils.Core",
+    "ptri_camerautils.Pylon",
+    "ptri_camerautils.CameraEmulation",
+    "ptri_camerautils.CameraEmulation.TcpFrameProviders",
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+exclude = "(?x)(^deploy/ui_pyside6/compiledui/)"
