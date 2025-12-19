@@ -105,7 +105,7 @@ class ImageFileClient(FrameProviderAbc):
         return self.__camera_pixel_format
 
     @override
-    def initialize_camera(self) -> None:
+    def initialize_camera(self) -> None | Exception:
         """
         Summary:
             Initialize the camera. Connect to the server, read 1 frame from it and disconnect.
@@ -113,20 +113,20 @@ class ImageFileClient(FrameProviderAbc):
 
         if self.__streaming:
             self.__logger.warning("Streaming already started.")
-            return
+            return RuntimeError("Streaming already started.")
 
         if self.__socket is not None:
             self.__logger.warning("Socket already connected.")
-            return
+            return RuntimeError("Socket already connected.")
 
         try:
-            self.start_camera_streaming()
+            self.start_camera_streaming() # connect to server, request server information and disconnect
             if self.__socket is None:
-                raise ConnectionError("Socket not connected. Cannot request server information.")
+                return ConnectionError("Socket not connected. Cannot request server information.")
 
             server_info: ImageServerInfo | Exception = self.__request_server_info(self.__socket)
             if isinstance(server_info, Exception):
-                raise server_info
+                return server_info
 
             self.__fps = server_info.fps
             self.__image_width = server_info.image_width
@@ -135,36 +135,42 @@ class ImageFileClient(FrameProviderAbc):
 
         except Exception as e:
             self.__logger.error("Failed to start camera streaming: %s", e)
+            return e
 
         finally: 
-            self.stop_camera_streaming()
+            self.stop_camera_streaming() # disconnect from server until start_camera_streaming is called
+
+        return None 
 
     @override
-    def deinitialize_camera(self) -> None:
+    def deinitialize_camera(self) -> None | Exception:
         """
         Summary:
-            Deinitialize the camera. This method does nothing for ImageFileClient.
+            Deinitialize the camera. Close the socket.
         """
+        close_socket_error: None | Exception = self.__close_socket()
+
         self.__fps = 0
         self.__image_width = 0
         self.__image_height = 0
         self.__camera_pixel_format = PixelFormatEnum.UNKNOWN
         self.__last_frame_time = 0.0
-        self.__close_socket()
+        
+        return close_socket_error
 
     @override
-    def start_camera_streaming(self) -> None:
+    def start_camera_streaming(self) -> None | Exception:
         """
         Summary:
             Start streaming frames from the camera by establishing a persistent connection to the server.
         """
         if self.__streaming:
             self.__logger.warning("Streaming already started.")
-            return
+            return RuntimeError("Streaming already started.")
 
         if self.__socket is not None:
             self.__logger.warning("Socket already connected.")
-            return
+            return RuntimeError("Socket already connected.")
 
         try:
             self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -175,21 +181,27 @@ class ImageFileClient(FrameProviderAbc):
         except Exception as e:
             self.__logger.error("Failed to connect to server on port %d: %s", self.__port, str(e))
             self.__close_socket()
-            raise
+            return e
+
+        return None
 
     @override
-    def stop_camera_streaming(self) -> None:
+    def stop_camera_streaming(self) -> None | Exception:
         """
         Summary:
             Stop streaming frames from the camera.
         """
         if not self.__streaming:
             self.__logger.warning("Streaming not started.")
-            return
+            return RuntimeError("Streaming not started.")
 
         self.__streaming = False
-        self.__close_socket()
+        close_socket_error: None | Exception = self.__close_socket()
+        if isinstance(close_socket_error, Exception):
+            return close_socket_error
+
         self.__logger.info("Camera streaming stopped.")
+        return None
 
     @override
     def get_frame(self) -> GrabbedImage | Exception:
@@ -308,7 +320,7 @@ class ImageFileClient(FrameProviderAbc):
         except Exception as e:
             return RuntimeError(f"Error reading frame: {str(e)}")
 
-    def __close_socket(self) -> None:
+    def __close_socket(self) -> None | Exception:
         """
         Summary:
             Close the socket.
@@ -317,8 +329,8 @@ class ImageFileClient(FrameProviderAbc):
             if self.__socket is not None:
                 self.__socket.close()
                 self.__socket = None
-        except Exception:
-            pass
+        except Exception as e:
+            return RuntimeError(f"Error closing socket: {str(e)}")
 
     def __request_server_info(self, client_socket: socket.socket) -> ImageServerInfo | Exception:
         """

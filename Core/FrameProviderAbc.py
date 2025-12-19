@@ -42,32 +42,52 @@ class FrameProviderAbc(ABC):
     @abstractmethod
     def get_frame(self) -> GrabbedImage | Exception:
         """
-        Returns the next frame from the camera. If successfull, returns an instance of GrabbedImage. 
-        Otherwise, returns an exception.
+        Summary:
+            Returns the next frame from the camera. If successfull, returns an instance of GrabbedImage. 
+            Otherwise, returns an exception.
+            
+        Returns:
+            An instance of GrabbedImage if successful, otherwise an exception.
         """
 
     @abstractmethod
-    def deinitialize_camera(self) -> None:
+    def deinitialize_camera(self) -> None | Exception:
         """
-        Deinitialize the camera. This will close the camera and release the resources.
+        Summary:
+            Deinitialize the camera. This will close the camera and release the resources.
+
+        Returns:
+            None if successful, otherwise an exception.
         """
 
     @abstractmethod
-    def initialize_camera(self) -> None:
+    def initialize_camera(self) -> None | Exception:
         """
-        Initialize the camera. This will open the camera and initialize the resources.
-        """
-
-    @abstractmethod
-    def start_camera_streaming(self) -> None:
-        """
-        Start streaming frames from the camera. The camera will become ready to provide frames.
-        But much of the configuration options will be disabled.
+        Summary:
+            Initialize the camera. This will open the camera and initialize the resources.
+            
+        Returns:
+            None if successful, otherwise an exception.
         """
 
     @abstractmethod
-    def stop_camera_streaming(self) -> None:
+    def start_camera_streaming(self) -> None | Exception:
         """
-        Stop streaming frames from the camera. This might enable some of the configuration options that were not available
-        when the camera was streaming.
+        Summary:
+            Start streaming frames from the camera. The camera will become ready to provide frames.
+            But much of the configuration options will be disabled.
+            
+        Returns:
+            None if successful, otherwise an exception.
+        """
+
+    @abstractmethod
+    def stop_camera_streaming(self) -> None | Exception:
+        """
+        Summary:
+            Stop streaming frames from the camera. This might enable some of the configuration options that were not available
+            when the camera was streaming.
+            
+        Returns:
+            None if successful, otherwise an exception.
         """

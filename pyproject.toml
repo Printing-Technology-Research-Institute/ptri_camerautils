@@ -51,4 +51,3 @@ packages = [
 
 [tool.mypy]
 ignore_missing_imports = true
-exclude = "(?x)(^deploy/ui_pyside6/compiledui/)"

@@ -8,7 +8,7 @@ from typing import Any, Tuple, Literal
 from pypylon import pylon
 from pypylon.pylon import ImageFormatConverter, GrabStrategy_LatestImageOnly, GrabResult, TimeoutHandling_ThrowException
 from pypylon.pylon import InstantCamera, GrabResult
-from pypylon.genicam import INodeMap, IEnumeration, IEnumEntry, INode, IFloat, IInteger, IBoolean, TimeoutException
+from pypylon.genicam import INodeMap, IEnumeration, IEnumEntry, INode, IFloat, IInteger, IBoolean, TimeoutException, RuntimeException
 from ..CameraEnum import CameraEnum
 from ..Core.GrabbedImage import GrabbedImage
 from ..Core.FrameProviderAbc import FrameProviderAbc
@@ -34,15 +34,27 @@ class PylonCameraWrapper(FrameProviderAbc, SettingPersistentCameraAbc):
 
         self.__logger:logging.Logger = logger if logger is not None else logging.getLogger(__name__)
 
-    def start_camera_streaming(self):
+    def start_camera_streaming(self) -> None | Exception:
 
-        self.__camera.StartGrabbing(GrabStrategy_LatestImageOnly)
+        try:
+            self.__camera.StartGrabbing(GrabStrategy_LatestImageOnly)
+        except RuntimeException as e:
+            self.__logger.error("Failed to start camera streaming: %s", e)
+            return e
+
         self.__logger.info("Camera started streaming")
+        return None
 
-    def stop_camera_streaming(self):
+    def stop_camera_streaming(self) -> None | Exception:
 
-        self.__camera.StopGrabbing()
+        try:
+            self.__camera.StopGrabbing()
+        except RuntimeException as e:
+            self.__logger.error("Failed to stop camera streaming: %s", e)
+            return e
+
         self.__logger.info("Camera stopped streaming")
+        return None
 
     def get_camera_info(self) -> dict:
         """Get camera information as a dictionary."""
@@ -56,16 +68,49 @@ class PylonCameraWrapper(FrameProviderAbc, SettingPersistentCameraAbc):
             "device_version": device_info.GetDeviceVersion(),
         }
 
-    def initialize_camera(self):
-        self.__camera.Open()
-        self.__node_map = self.__camera.GetNodeMap()
-        self.__camera_name = self.__camera.GetDeviceInfo().GetFriendlyName()
-        self.__camera.PixelFormat.Value = PylonCameraWrapper.get_pylon_pixel_format_str(self.__camera_pixel_format)
+    def initialize_camera(self) -> None | Exception:
 
-    def deinitialize_camera(self):
-        self.__camera.Close()
-        self.__camera.DestroyDevice()
+        try:
+            self.__camera.Open()
+        except RuntimeException as e:
+            self.__logger.error("Failed to open camera: %s", e)
+            return e
+
+        self.__node_map = self.__camera.GetNodeMap()
+        if not isinstance(self.__node_map, INodeMap):
+            self.__logger.error("Failed to get camera node map")
+            return RuntimeException("Failed to get node map")
+
+        try:
+            self.__camera_name = self.__camera.GetDeviceInfo().GetFriendlyName()
+        except RuntimeException as e:
+            self.__logger.error("Failed to get camera name: %s", e)
+            return e
+
+        try:
+            self.__camera.PixelFormat.Value = PylonCameraWrapper.get_pylon_pixel_format_str(self.__camera_pixel_format)
+        except ValueError as e:
+            self.__logger.error("Failed to set camera pixel format: %s", e)
+            return e
+
+        return None
+
+    def deinitialize_camera(self) -> None | Exception:
+        try:
+            self.__camera.Close()
+        except RuntimeException as e:
+            self.__logger.error("Failed to close camera: %s", e)
+            return e
+
+        try:
+            self.__camera.DestroyDevice()
+        except RuntimeException as e:
+            self.__logger.error("Failed to destroy camera: %s", e)
+            return e
+
         self.__logger.info("Camera deinitialized")
+        return None
+
 
     def log_camera_info(self):
         """Log camera information to the logger."""
@@ -632,6 +677,16 @@ class PylonCameraWrapper(FrameProviderAbc, SettingPersistentCameraAbc):
 
     @staticmethod
     def get_pylon_pixel_format_str(pixel_format: PixelFormatEnum) -> str:
+        """
+        Summary:
+            Returns the pylon pixel format string for the given pixel format.
+
+        Returns:
+            The pylon pixel format string for the given pixel format.
+
+        Raises:
+            ValueError: If the pixel format is not an entry in the PixelFormatEnum enum.
+        """
 
         assert isinstance(pixel_format, PixelFormatEnum), "Pixel format must be an instance of PixelFormatEnum"
 

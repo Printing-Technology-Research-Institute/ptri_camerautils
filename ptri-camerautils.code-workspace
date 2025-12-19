@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"mypy-type-checker.args": [
+			"--config-file=${workspaceFolder}/pyproject.toml", "--ignore-missing-imports"
+		],
+		"mypy-type-checker.reportingScope": "file"
+	},
+}
