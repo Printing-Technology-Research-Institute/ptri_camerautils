@@ -9,6 +9,21 @@
 - **相機模擬**：透過 TCP 伺服器模擬相機，可用於開發和測試
 - **多種像素格式**：支援 BGR8、RGB8、MONO8 以及多種 Bayer 格式
 
+## 安裝方式
+此套件尚未發布於pypl，請在您的程式庫中，以submodule方式下載原始碼並用pip安裝。下列指令將會下載原始碼至```ptri_camerautils```資較夾中，可以視需求決定是否需要額外安裝basler相機的後端pypylon。
+```powershell
+git submodule add https://github.com/Printing-Technology-Research-Institute/ptri_camerautils.git ptri_camerautils
+
+# 不支援basler相機
+pip install ./ptri_camerautils
+
+# 加入basler相機支援
+pip install ./ptri_camerautils[pypylon]
+```
+
+> ! [!WARNING]
+> 目前已知pip<=24在安裝此套件時會出問題，請先用python -m pip install --upgrade pip先升級至25版以上，載安裝此套件。
+
 ## 模組結構
 
 ### Core 模組

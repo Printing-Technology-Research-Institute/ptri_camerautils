@@ -10,4 +10,17 @@
 		],
 		"mypy-type-checker.reportingScope": "file"
 	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Debug: test_stop_image_file_server.py",
+				"type": "debugpy",
+				"request": "launch",
+				"program": "${workspaceFolder}/tests/test_stop_image_file_server.py",
+				"console": "integratedTerminal"
+			}
+		],
+		"compounds": []
+	}
 }

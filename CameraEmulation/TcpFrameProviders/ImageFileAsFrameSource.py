@@ -37,7 +37,7 @@ class ImageServerInfo(NamedTuple):
     server_port: int
 
 class _ClientMessage(NamedTuple):
-    message: Literal["get_frame", "get_server_info"]
+    message: Literal["get_frame", "get_server_info", "next_image"]
 
 class ImageFileClient(FrameProviderAbc):
 
@@ -183,6 +183,36 @@ class ImageFileClient(FrameProviderAbc):
             self.__close_socket()
             return e
 
+        return None
+
+    def request_next_image(self) -> None | Exception:
+        """
+        Summary:
+            Ask the server to start sending another image.
+        Note:
+            This is different from get_frame() as the server sends the data of the same image when get_frame() is called.
+        """
+
+        if not self.__streaming:
+            self.__logger.warning("Streaming not started. Please call start_camera_streaming first.")
+            return RuntimeError("Streaming not started. Please call start_camera_streaming first.")
+        
+        if self.__socket is None:
+            self.__logger.warning("Not connected to server. Connection may have been closed.")
+            return ConnectionError("Not connected to server. Connection may have been closed.")
+        
+        try:
+            request_message: _ClientMessage = _ClientMessage(message = "next_image")
+            request_json: str = json.dumps(request_message._asdict())
+            request_bytes: bytes = (request_json + "\n").encode("utf-8")
+            self.__socket.sendall(request_bytes)
+        except socket.timeout:
+            return TimeoutError("Timeout while requesting next image.")
+        except json.JSONDecodeError as e:
+            return ValueError(f"Failed to parse request JSON: {str(e)}")
+        except Exception as e:
+            return RuntimeError(f"Error requesting next image: {str(e)}")
+        
         return None
 
     @override
@@ -394,7 +424,7 @@ class ImageFileClient(FrameProviderAbc):
         self.__logger.debug("Server info: %s", server_info)
         return server_info
 
-class ImageFileServer(cmd.Cmd):
+class ImageFileServer:
 
     def __init__(self, image_path_root:pathlib.Path, repeat:bool, port:int, chunk_size:int, client_read_timeout:float, frame_rate:float | int, logger: Logger):
         """
@@ -420,10 +450,6 @@ class ImageFileServer(cmd.Cmd):
         assert frame_rate > 0, "frame_rate must be greater than 0."
         assert isinstance(logger, Logger), "logger must be an instance of Logger."
 
-        self.intro = "Welcome to the image file server console. Type ? to list available commands."
-        self.prompt = "(ImageServer)\t"
-        super(ImageFileServer, self).__init__()
-
         self.__frame_rate:float = float(frame_rate)
         self.__image_path_root:pathlib.Path = image_path_root
         self.__repeat:bool = repeat
@@ -440,52 +466,46 @@ class ImageFileServer(cmd.Cmd):
         self.__server_socket: socket.socket | None = None
         self.__handle_client_thread: threading.Thread | None = None
 
-    def emptyline(self):
-        self.do_next(None)
+    @property
+    def current_image_path(self) -> pathlib.Path | None:
+        """
+        Summary:
+            Returns the current image path.
+        """
+        return self.__current_image_path
 
-    def do_next(self, _):
-        'Move on to the next image.'
-        self.__read_image_from_generator()
-        self.__logger.info("Serving image %s", self.__current_image_path)
+    @property
+    def image_path_root(self) -> pathlib.Path:
+        """
+        Summary:
+            Returns the image path root.
+        """
+        return self.__image_path_root
 
-    def do_exit(self, _):
-        'Stop server and quit application.'
-        self.__set_server_stop_request_flag()
-        return True
+    @property
+    def repeat(self) -> bool:
+        """
+        Summary:
+            Returns the repeat flag.
+        """
+        return self.__repeat
 
-    def do_EOF(self, _):
-        'Stop server and quit application.'
-        self.__set_server_stop_request_flag()
-        return True
+    @property
+    def port(self) -> int:
+        """
+        Summary:
+            Returns the port number.
+        """
+        return self.__port
 
-    def do_quit(self, _):
-        'Stop server and quit application.'
-        self.__set_server_stop_request_flag()
-        return True
-    
-    def do_show(self, _) -> None:
-        'Open the current image in an image view app on the device.'
-        current_image:PIL.Image.ImageFile.ImageFile = PIL.Image.open(str(self.__current_image_path))
-        current_image.show()
-
-    def do_status(self, _):
-        'Print the port server is listening on and the file currently serving.'
-        self.__logger.critical(
-            """
-            Port: %d
-            CurentImage: %s
-            ImagePathRoot: %s
-            Repeat: %r""", self.__port, self.__current_image_path, self.__image_path_root, self.__repeat)
-
-    def run_server(self) -> bool:
+    def start_server(self) -> bool:
         """
         Summary:
             Starts the server and listen on specified port.
 
         Description:
-            This method starts 2 aschronoys thread, one for the command shell interface and the other for server. Execution on main thread is blocked until the server thread returns,
-            which is when the user inputs "exit" or "quit" in the command shell. If any error is encountered when initializing the server, this method returns False and the server is
-            not started.
+            This method starts the server thread. If any error is encountered when initializing the server, 
+            this method returns False and the server is not started.
 
         Returns:
             True when the server runs and stops without issue. False upon encountering any error.
@@ -505,19 +525,42 @@ class ImageFileServer(cmd.Cmd):
         
         self.__handle_client_thread = threading.Thread(target = self.__server_loop)
         self.__handle_client_thread.start()
-
-        # * block the main thread until self.cmdloop ends.
-        # * self.cmdloop ends when any method returns True when server loop is active.
-        try:
-            self.cmdloop()
-        except KeyboardInterrupt:
-            self.__set_server_stop_request_flag()
-
-        # * block the main thread until self.__handle_client_thread finishes
-        # * self.__handle_client_thread finishes when self.__server_stop_requested flag is set and server stops properly.
-        self.__handle_client_thread.join()
         return True
 
+    def wait_for_server_stop(self) -> None:
+        """
+        Summary:
+            Blocks until the server thread finishes.
+        """
+        if self.__handle_client_thread is not None:
+            self.__handle_client_thread.join()
+
+    def is_server_stop_requested(self) -> bool:
+        """
+        Summary:
+            Returns whether the server stop has been requested.
+        """
+        return self.__server_stop_requested
+
+    def request_next_image(self) -> bool:
+        """
+        Summary:
+            Move on to the next image.
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        result = self.__read_image_from_generator()
+        if result:
+            self.__logger.info("Serving image %s", self.__current_image_path)
+        return result
+
+    def request_server_stop(self) -> None:
+        """
+        Summary:
+            Request the server to stop.
+        """
+        self.__set_server_stop_request_flag()
 
     def __server_loop(self) -> None:
 
@@ -599,8 +642,9 @@ class ImageFileServer(cmd.Cmd):
                 # Read client request
                 request: _ClientMessage | None = self.__read_client_request(client_socket)
                 self.__logger.debug("Client request: %s", request)
+
+                # Client closed connection
                 if request is None:
-                    # Client closed connection
                     break
 
                 if request.message == "get_frame":
@@ -622,6 +666,19 @@ class ImageFileServer(cmd.Cmd):
                     self.__logger.debug("Sending server info to client.")
                     self.__write_server_info_to_client(client_socket)
                     last_frame_time = time.time()
+
+                elif request.message == "next_image":
+                    # Request next image from server
+                    self.__logger.debug("Requesting next image from server.")
+                    if not self.__read_image_from_generator():
+                        self.__logger.info("Failed to read image at path %s", self.__current_image_path)
+                        continue
+                    self.__logger.info("Serving image %s", self.__current_image_path)
+                    last_frame_time = time.time()
+
+                else:
+                    self.__logger.warning("Invalid client request: %s", request.message)
+                    continue
 
             except socket.timeout:
                 self.__logger.warning("Timeout while waiting for client request.")
@@ -685,10 +742,9 @@ class ImageFileServer(cmd.Cmd):
         Summary:
             Set the stop requested flag and terminate server loop.
         """
-        self.__logger.critical("Quitting application.")
+        self.__logger.info("Server stop requested.")
         self.__server_stop_requested = True
         
-
     def __write_server_info_to_client(self, client_socket:socket.socket) -> None:
         """
         Summary:
@@ -773,7 +829,7 @@ class ImageFileServer(cmd.Cmd):
                 # FIXME: application doesn't break when all image served
                 return False
 
-            self.__logger.critical("Repeating all available images.")
+            self.__logger.info("Repeating all available images.")
             self.__init_file_name_generator()
             self.__current_image_path = next(self.__image_file_name_gen)
 
@@ -814,3 +870,98 @@ class ImageFileServer(cmd.Cmd):
                     continue
                 
                 yield file_path
+
+class ImageFileServerShell(cmd.Cmd):
+
+    def __init__(self, image_file_server: ImageFileServer, logger: Logger):
+        """
+        Summary:
+            Initialize the ImageFileServerShell.
+
+        Parameters:
+            image_file_server: The ImageFileServer instance to control.
+            logger: The logger instance for logging.
+        """
+        assert isinstance(image_file_server, ImageFileServer), "image_file_server must be an instance of ImageFileServer."
+        assert isinstance(logger, Logger), "logger must be an instance of Logger."
+
+        self.intro = "Welcome to the image file server console. Type ? to list available commands."
+        self.prompt = "(ImageServer)\t"
+        super(ImageFileServerShell, self).__init__()
+
+        self.__image_file_server: ImageFileServer = image_file_server
+        self.__logger: Logger = logger
+
+    def emptyline(self):
+        """Handle empty line input - move to next image."""
+        self.do_next(None)
+
+    def do_next(self, _):
+        """Move on to the next image."""
+        self.__image_file_server.request_next_image()
+
+    def do_exit(self, _):
+        """Stop server and quit application."""
+        self.__image_file_server.request_server_stop()
+        return True
+
+    def do_EOF(self, _):
+        """Stop server and quit application."""
+        self.__image_file_server.request_server_stop()
+        return True
+
+    def do_quit(self, _):
+        """Stop server and quit application."""
+        self.__image_file_server.request_server_stop()
+        return True
+    
+    def do_show(self, _) -> None:
+        """Open the current image in an image view app on the device."""
+        current_image_path = self.__image_file_server.current_image_path
+        if current_image_path is None:
+            self.__logger.warning("No image currently loaded.")
+            return
+        current_image: PIL.Image.ImageFile.ImageFile = PIL.Image.open(str(current_image_path))
+        current_image.show()
+
+    def do_status(self, _):
+        """Print the port server is listening on and the file currently serving."""
+        self.__logger.critical(
+            """
+            Port: %d
+            CurrentImage: %s
+            ImagePathRoot: %s
+            Repeat: %r""", 
+            self.__image_file_server.port, 
+            self.__image_file_server.current_image_path, 
+            self.__image_file_server.image_path_root, 
+            self.__image_file_server.repeat)
+
+    def start_server_and_shell(self) -> bool:
+        """
+        Summary:
+            Starts the server and command shell interface.
+
+        Description:
+            This method starts 2 asynchronous threads, one for the command shell interface and the other for server. 
+            Execution on main thread is blocked until the server thread returns, which is when the user inputs "exit" 
+            or "quit" in the command shell. If any error is encountered when initializing the server, this method 
+            returns False and the server is not started.
+
+        Returns:
+            True when the server runs and stops without issue. False upon encountering any error.
+        """
+        if not self.__image_file_server.start_server():
+            return False
+
+        # * block the main thread until self.cmdloop ends.
+        # * self.cmdloop ends when any method returns True when server loop is active.
+        try:
+            self.cmdloop()
+        except KeyboardInterrupt:
+            self.__image_file_server.request_server_stop()
+
+        # * block the main thread until server thread finishes
+        # * server thread finishes when server stop is requested and server stops properly.
+        self.__image_file_server.wait_for_server_stop()
+        return True

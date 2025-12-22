@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from logging import Logger
 from argparse import Namespace, ArgumentParser
-from ptri_camerautils.CameraEmulation.TcpFrameProviders.ImageFileAsFrameSource import ImageFileServer
+from ptri_camerautils.CameraEmulation.TcpFrameProviders.ImageFileAsFrameSource import ImageFileServer, ImageFileServerShell
 
 
 def _str2bool(v: str) -> bool:
@@ -25,7 +25,7 @@ def parse_commandline_args() -> Namespace:
 
         
     parser = ArgumentParser(prog = "Image File Server", formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--path", help = "path to the directory containing images", type = Path)
+    parser.add_argument("--path", help = "path to the directory containing images", type = Path, required = True)
     parser.add_argument("--port", help = "local server port number", type = int, default = 6008)
     parser.add_argument("--recursive", help = "whether to recursivly load the image files in the child directory of specified path.", type = _str2bool, default = True)
     parser.add_argument("--log-level", help = "log level", type = int, default = logging.INFO)
@@ -48,7 +48,8 @@ def main() -> None:
     logger.info("Set listening port: %d", arguments.port)
 
     image_file_server: ImageFileServer = ImageFileServer(arguments.path, arguments.recursive, arguments.port, arguments.chunksize, arguments.clienttimeout, arguments.framerate, logger)
-    image_file_server.run_server()
+    image_file_server_shell: ImageFileServerShell = ImageFileServerShell(image_file_server, logger)
+    image_file_server_shell.start_server_and_shell()
 
 if __name__ == "__main__":
     main()
