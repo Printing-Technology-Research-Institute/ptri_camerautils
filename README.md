@@ -21,8 +21,8 @@ pip install ./ptri_camerautils
 pip install ./ptri_camerautils[pypylon]
 ```
 
-> ! [!WARNING]
-> 目前已知pip<=24在安裝此套件時會出問題，請先用python -m pip install --upgrade pip先升級至25版以上，載安裝此套件。
+> [!WARNING]
+> pip<=24無法正確安裝此套件，請先用python -m pip install --upgrade pip先升級至25版以上。
 
 ## 模組結構
 
