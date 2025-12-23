@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from logging import Logger
 from argparse import Namespace, ArgumentParser
-from CameraEmulation.TcpFrameProviders.ImageFileAsFrameSource import ImageFileServer, ImageFileServerShell
+from ptri_camerautils.CameraEmulation.TcpFrameProviders.ImageFileAsFrameSource import ImageFileServer, ImageFileServerShell
 
 
 def _str2bool(v: str) -> bool:
