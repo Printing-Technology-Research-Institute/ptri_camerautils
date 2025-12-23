@@ -820,6 +820,7 @@ class ImageFileServer:
 
         try:
             self.__current_image_path = next(self.__image_file_name_gen)
+            self.__logger.debug("New image path %s", self.__current_image_path)
         except StopIteration:
             self.__logger.info("All image served.")
 
@@ -834,6 +835,7 @@ class ImageFileServer:
             self.__current_image_path = next(self.__image_file_name_gen)
 
         image:np.ndarray = np.array(PIL.Image.open(str(self.__current_image_path)))
+        self.__logger.debug("New image of shape %s loaded from path %s", image.shape, self.__current_image_path)
         self.__output_buffer = image.tobytes()
         self.__image_shape = image.shape
         return True
