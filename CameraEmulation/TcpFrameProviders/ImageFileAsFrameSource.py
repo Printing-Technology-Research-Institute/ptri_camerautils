@@ -451,6 +451,8 @@ class ImageFileServer:
         assert isinstance(logger, Logger), "logger must be an instance of Logger."
 
         self.__frame_rate:float = float(frame_rate)
+        self.__latest_frame_time:float = 0.0
+
         self.__image_path_root:pathlib.Path = image_path_root
         self.__repeat:bool = repeat
         self.__image_file_name_gen:Iterator[pathlib.Path] | None = None
@@ -574,9 +576,9 @@ class ImageFileServer:
             self.__server_socket.listen(1) # Only allow 1 connection at a time
             self.__logger.info("Server listening on port %d", self.__port)
 
-        except OSError:
+        except OSError as e:
             # * error handling if socket fails to bind to specified port
-            self.__logger.error("Cannot open port %d on %s", self.__port, "localhost")
+            self.__logger.error("Cannot open port %d on %s: %s", self.__port, "localhost", e)
             self.__set_server_stop_request_flag()
             if isinstance(self.__server_socket, socket.socket):
                 self.__server_socket.close()
@@ -634,8 +636,6 @@ class ImageFileServer:
             client_socket: The socket connection to the client.
         """
         frame_interval: float = 1.0 / self.__frame_rate
-        # Initialize to allow first frame to be sent immediately
-        last_frame_time: float = time.time() - frame_interval
 
         while not self.__server_stop_requested:
             try:
@@ -648,24 +648,19 @@ class ImageFileServer:
                     break
 
                 if request.message == "get_frame":
-                    # Calculate time to wait based on frame rate
-                    current_time: float = time.time()
-                    time_since_last_frame: float = current_time - last_frame_time
+                    time_since_last_frame: float = time.time() - self.__latest_frame_time
                     
                     if time_since_last_frame < frame_interval:
-                        # Wait until enough time has passed
-                        wait_time: float = frame_interval - time_since_last_frame
-                        time.sleep(wait_time)
+                        time.sleep(frame_interval - time_since_last_frame)
 
-                    # Send frame to client
                     self.__logger.debug("Sending frame data to client.")
                     self.__write_image_and_header_to_client(client_socket)
+                    self.__latest_frame_time = time.time()
 
                 elif request.message == "get_server_info":
                     # Send server info to client
                     self.__logger.debug("Sending server info to client.")
                     self.__write_server_info_to_client(client_socket)
-                    last_frame_time = time.time()
 
                 elif request.message == "next_image":
                     # Request next image from server
@@ -674,7 +669,6 @@ class ImageFileServer:
                         self.__logger.info("Failed to read image at path %s", self.__current_image_path)
                         continue
                     self.__logger.info("Serving image %s", self.__current_image_path)
-                    last_frame_time = time.time()
 
                 else:
                     self.__logger.warning("Invalid client request: %s", request.message)
